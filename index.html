@@ -400,6 +400,19 @@
   }
   function sfxWin(){ var notes=[523.25,659.25,784,1046.5]; for(var i=0;i<notes.length;i++){ tone(notes[i], i*0.1, 0.4, "sine", 0.2); } }
 
+  /* "Thinking music" — an original suspense ostinato (not a reproduction of any
+     copyrighted theme) that loops softly while a clue's timer is running. */
+  var THINK_NOTES = [392.00,392.00,440.00,392.00,349.23,392.00,440.00,493.88];
+  var thinkTimeoutId = null;
+  var thinkStep = 0;
+  function scheduleThink(){
+    if(soundOn){ tone(THINK_NOTES[thinkStep % THINK_NOTES.length], 0, 0.3, "square", 0.05); }
+    thinkStep++;
+    thinkTimeoutId = setTimeout(scheduleThink, 380);
+  }
+  function startThinkingMusic(){ stopThinkingMusic(); thinkStep = 0; scheduleThink(); }
+  function stopThinkingMusic(){ if(thinkTimeoutId){ clearTimeout(thinkTimeoutId); thinkTimeoutId = null; } }
+
   /* ---------------- State ---------------- */
   var state = {
     teams: [ {name:"Team 1", score:0}, {name:"Team 2", score:0} ],
@@ -520,6 +533,7 @@
 
   function clearTimer(){
     if(timerInterval){ clearInterval(timerInterval); timerInterval = null; }
+    stopThinkingMusic();
   }
 
   function closeClue(){
@@ -581,6 +595,7 @@
 
     var fill = clueStage.querySelector("#timerFill");
     var secondsLeft = timeLimit;
+    startThinkingMusic();
     timerInterval = setInterval(function(){
       secondsLeft -= 1;
       var pct = Math.max(0, secondsLeft/timeLimit*100);
