@@ -401,16 +401,52 @@
   function sfxWin(){ var notes=[523.25,659.25,784,1046.5]; for(var i=0;i<notes.length;i++){ tone(notes[i], i*0.1, 0.4, "sine", 0.2); } }
 
   /* "Thinking music" — an original suspense ostinato (not a reproduction of any
-     copyrighted theme) that loops softly while a clue's timer is running. */
-  var THINK_NOTES = [392.00,392.00,440.00,392.00,349.23,392.00,440.00,493.88];
+     copyrighted theme). A plucked bell tone plus a soft clock-tick, looping under
+     a 16-step minor-key phrase that starts slow and quiet and builds in tempo and
+     volume as the clue timer runs down (driven by setThinkProgress, 0 → 1). */
+  function pluckTone(freq, start, dur, gain){
+    var c = ctx(); if(!c || !soundOn || !freq) return;
+    try{
+      var t0 = c.currentTime + start;
+      var osc1 = c.createOscillator(), g1 = c.createGain();
+      osc1.type = "triangle"; osc1.frequency.value = freq;
+      osc1.connect(g1); g1.connect(c.destination);
+      g1.gain.setValueAtTime(0, t0);
+      g1.gain.linearRampToValueAtTime(gain, t0 + 0.012);
+      g1.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc1.start(t0); osc1.stop(t0 + dur + 0.02);
+
+      var osc2 = c.createOscillator(), g2 = c.createGain();
+      osc2.type = "sine"; osc2.frequency.value = freq * 2;
+      osc2.connect(g2); g2.connect(c.destination);
+      g2.gain.setValueAtTime(0, t0);
+      g2.gain.linearRampToValueAtTime(gain * 0.32, t0 + 0.008);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.55);
+      osc2.start(t0); osc2.stop(t0 + dur * 0.55 + 0.02);
+    }catch(e){}
+  }
+  function clockTick(gain){ tone(1800, 0, 0.025, "square", gain); }
+
+  var THINK_MELODY = [ // original 16-step minor-key phrase (rests as null)
+    392.00, null,   349.23, 392.00,  440.00, null,   392.00, 349.23,
+    329.63, null,   349.23, 392.00,  440.00, 493.88, 440.00, null
+  ];
   var thinkTimeoutId = null;
   var thinkStep = 0;
+  var thinkProgress = 0; // 0 at clue start, 1 as time expires
+  function setThinkProgress(p){ thinkProgress = Math.max(0, Math.min(1, p)); }
   function scheduleThink(){
-    if(soundOn){ tone(THINK_NOTES[thinkStep % THINK_NOTES.length], 0, 0.3, "square", 0.05); }
+    var interval = 560 - thinkProgress * 320;   // 560ms -> 240ms
+    var noteGain = 0.045 + thinkProgress * 0.10; // 0.045 -> 0.145
+    var tickGain = 0.018 + thinkProgress * 0.05;
+    var dur = Math.max(0.14, (interval / 1000) * 0.9);
+    var freq = THINK_MELODY[thinkStep % THINK_MELODY.length];
+    if(freq) pluckTone(freq, 0, dur, noteGain);
+    clockTick(tickGain);
     thinkStep++;
-    thinkTimeoutId = setTimeout(scheduleThink, 380);
+    thinkTimeoutId = setTimeout(scheduleThink, interval);
   }
-  function startThinkingMusic(){ stopThinkingMusic(); thinkStep = 0; scheduleThink(); }
+  function startThinkingMusic(){ stopThinkingMusic(); thinkStep = 0; thinkProgress = 0; scheduleThink(); }
   function stopThinkingMusic(){ if(thinkTimeoutId){ clearTimeout(thinkTimeoutId); thinkTimeoutId = null; } }
 
   /* ---------------- State ---------------- */
@@ -600,6 +636,7 @@
       secondsLeft -= 1;
       var pct = Math.max(0, secondsLeft/timeLimit*100);
       fill.style.width = pct + "%";
+      setThinkProgress((timeLimit - secondsLeft) / timeLimit);
       if(secondsLeft <= 5 && secondsLeft > 0) sfxTick();
       if(secondsLeft <= 0){
         clearTimer();
