@@ -436,9 +436,9 @@
   var thinkProgress = 0; // 0 at clue start, 1 as time expires
   function setThinkProgress(p){ thinkProgress = Math.max(0, Math.min(1, p)); }
   function scheduleThink(){
-    var interval = 560 - thinkProgress * 320;   // 560ms -> 240ms
-    var noteGain = 0.045 + thinkProgress * 0.10; // 0.045 -> 0.145
-    var tickGain = 0.018 + thinkProgress * 0.05;
+    var interval = 520 - thinkProgress * 320;   // 520ms -> 200ms
+    var noteGain = 0.10 + thinkProgress * 0.12;  // 0.10 -> 0.22, audible from the first note
+    var tickGain = 0.045 + thinkProgress * 0.06; // 0.045 -> 0.105
     var dur = Math.max(0.14, (interval / 1000) * 0.9);
     var freq = THINK_MELODY[thinkStep % THINK_MELODY.length];
     if(freq) pluckTone(freq, 0, dur, noteGain);
