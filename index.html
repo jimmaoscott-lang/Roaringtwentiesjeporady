@@ -253,9 +253,13 @@
   .wager-input:focus-visible{ outline:3px solid var(--focus); }
   .hint{ text-align:center; color:var(--ink-dim); font-size:.85rem; }
   .wager-grid{ display:flex; flex-direction:column; gap:10px; max-width:320px; margin:0 auto 6px; }
-  .wager-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .wager-row{ display:flex; flex-direction:column; gap:5px; }
+  .wager-row-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
   .wager-row label{ font-family:'Josefin Sans',sans-serif; font-weight:600; color:var(--ink); }
-  .wager-row .wager-input{ width:110px; font-size:1.2rem; padding:6px; margin:0; }
+  .wager-row-total{ font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:.02em; color:var(--gold); }
+  .wager-row .wager-input{ width:100%; font-size:1.2rem; padding:6px; margin:0; text-align:left; padding-left:12px; }
+  .wager-row .wager-input:disabled{ opacity:.4; }
+  .wager-row-note{ font-family:'Josefin Sans',sans-serif; font-size:.72rem; color:var(--ink-dim); font-style:italic; }
   .wager-summary{
     text-align:center; font-family:'Josefin Sans',sans-serif; font-size:.82rem; color:var(--ink-dim);
     margin:-6px 0 10px;
@@ -683,16 +687,22 @@
     sfxDailyDouble();
     clearTimer();
     var rows = state.teams.map(function(team, i){
-      var maxWager = Math.max(baseValue*2, Math.max(500, team.score));
-      var def = Math.min(baseValue, maxWager);
+      var maxWager = Math.max(team.score, 0);
+      var minWager = maxWager > 0 ? 1 : 0;
+      var def = maxWager > 0 ? Math.min(Math.max(baseValue, minWager), maxWager) : 0;
+      var disabled = maxWager > 0 ? '' : ' disabled';
       return '<div class="wager-row">' +
-        '<label for="wagerInput'+i+'">' + escapeHtml(team.name) + '</label>' +
-        '<input class="wager-input" id="wagerInput'+i+'" type="number" inputmode="numeric" min="5" max="'+maxWager+'" step="5" value="'+def+'" aria-label="'+escapeHtml(team.name)+' wager amount" data-max="'+maxWager+'">' +
+        '<div class="wager-row-head">' +
+          '<label for="wagerInput'+i+'">' + escapeHtml(team.name) + '</label>' +
+          '<span class="wager-row-total">$' + team.score + '</span>' +
+        '</div>' +
+        '<input class="wager-input" id="wagerInput'+i+'" type="number" inputmode="numeric" min="'+minWager+'" max="'+maxWager+'" step="1" value="'+def+'"' + disabled + ' aria-label="'+escapeHtml(team.name)+' wager amount" data-max="'+maxWager+'" data-min="'+minWager+'">' +
+        (maxWager === 0 ? '<span class="wager-row-note">No points to wager yet</span>' : '') +
       '</div>';
     }).join('');
     clueStage.innerHTML =
       '<div class="dd-banner">DAILY DOUBLE</div>' +
-      '<p class="hint">Every team can wager on this one. Set each team&rsquo;s wager (minimum $5), then lock them in.</p>' +
+      '<p class="hint">Every team can wager on this one, up to their own total. Set each team&rsquo;s wager, then lock them in.</p>' +
       '<div class="wager-grid">' + rows + '</div>' +
       '<div class="stage-actions"><button class="primary" id="wagerGo">Lock In Wagers</button></div>';
     clueStage.querySelector("#wagerGo").addEventListener("click", function(){
@@ -700,8 +710,9 @@
       state.teams.forEach(function(team, i){
         var input = clueStage.querySelector("#wagerInput"+i);
         var maxWager = parseInt(input.getAttribute("data-max"), 10);
+        var minWager = parseInt(input.getAttribute("data-min"), 10);
         var w = parseInt(input.value, 10);
-        if(isNaN(w) || w < 5) w = 5;
+        if(isNaN(w) || w < minWager) w = minWager;
         if(w > maxWager) w = maxWager;
         wagers[i] = w;
       });
