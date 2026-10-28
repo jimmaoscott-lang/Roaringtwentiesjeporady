@@ -237,6 +237,7 @@
   .award-row h3{ font-family:'Josefin Sans',sans-serif; font-size:.78rem; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-dim); text-align:center; }
   .award-grid{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
   .award-grid button{ min-width:120px; }
+  .award-grid button.team-toggle.selected{ background:var(--gold); color:#1a1208; box-shadow:0 0 0 2px var(--gold-bright); }
 
   .dd-banner{
     text-align:center; font-family:'Bebas Neue',sans-serif; letter-spacing:.06em;
@@ -704,7 +705,7 @@
         '<button class="ghost" id="btnSkip">Close (No Score)</button>' +
       '</div>' +
       '<div class="award-row" id="awardRow" hidden>' +
-        '<h3>Who answered correctly?</h3>' +
+        '<h3>' + (isDD ? 'Who answered correctly?' : 'Tap every team that got it right, then award points') + '</h3>' +
         '<div class="award-grid" id="awardGrid"></div>' +
       '</div>';
 
@@ -731,30 +732,86 @@
       awardRow.hidden = false;
       var grid = clueStage.querySelector("#awardGrid");
       grid.innerHTML = "";
-      state.teams.forEach(function(team, i){
-        var b = document.createElement("button");
-        b.textContent = team.name;
-        b.addEventListener("click", function(){
+
+      if(isDD){
+        // Daily Double: only the wagering team can be credited, so each
+        // team button scores immediately, same as before.
+        state.teams.forEach(function(team, i){
+          var b = document.createElement("button");
+          b.textContent = team.name;
+          b.addEventListener("click", function(){
+            markUsed(key);
+            adjustScore(i, pointValue);
+            state.activeTeam = i;
+            sfxCorrect();
+            saveState();
+            renderBoard();
+            closeClue();
+          });
+          grid.appendChild(b);
+        });
+        var wrongBtn = document.createElement("button");
+        wrongBtn.className = "ghost";
+        wrongBtn.textContent = "Wrong (lose wager)";
+        wrongBtn.addEventListener("click", function(){
           markUsed(key);
-          if(isDD){
-            adjustScore(i, pointValue);
-          } else {
-            adjustScore(i, pointValue);
-          }
-          state.activeTeam = i;
-          sfxCorrect();
+          adjustScore(state.activeTeam, -pointValue);
+          sfxWrong();
           saveState();
           renderBoard();
           closeClue();
         });
+        grid.appendChild(wrongBtn);
+        return;
+      }
+
+      // Regular clue: let the teacher mark every team that answered
+      // correctly (teams can buzz in together on an oral review), then
+      // award points to all of them at once.
+      var selected = {};
+      var awardBtn;
+      function refreshAwardBtn(){
+        var any = Object.keys(selected).some(function(k){ return selected[k]; });
+        awardBtn.disabled = !any;
+        awardBtn.textContent = any ? "Award Points to Selected" : "Select a team first";
+      }
+      state.teams.forEach(function(team, i){
+        var b = document.createElement("button");
+        b.textContent = team.name;
+        b.className = "team-toggle";
+        b.setAttribute("aria-pressed", "false");
+        b.addEventListener("click", function(){
+          selected[i] = !selected[i];
+          b.classList.toggle("selected", !!selected[i]);
+          b.setAttribute("aria-pressed", selected[i] ? "true" : "false");
+          refreshAwardBtn();
+        });
         grid.appendChild(b);
+      });
+      awardBtn = document.createElement("button");
+      awardBtn.className = "primary";
+      grid.appendChild(awardBtn);
+      refreshAwardBtn();
+      awardBtn.addEventListener("click", function(){
+        markUsed(key);
+        var firstSelected = null;
+        Object.keys(selected).forEach(function(k){
+          if(!selected[k]) return;
+          var i = parseInt(k, 10);
+          adjustScore(i, pointValue);
+          if(firstSelected === null) firstSelected = i;
+        });
+        if(firstSelected !== null) state.activeTeam = firstSelected;
+        sfxCorrect();
+        saveState();
+        renderBoard();
+        closeClue();
       });
       var noneBtn = document.createElement("button");
       noneBtn.className = "ghost";
-      noneBtn.textContent = isDD ? "Wrong (lose wager)" : "No one got it";
+      noneBtn.textContent = "No one got it";
       noneBtn.addEventListener("click", function(){
         markUsed(key);
-        if(isDD){ adjustScore(state.activeTeam, -pointValue); }
         sfxWrong();
         saveState();
         renderBoard();
