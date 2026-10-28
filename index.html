@@ -252,6 +252,14 @@
   }
   .wager-input:focus-visible{ outline:3px solid var(--focus); }
   .hint{ text-align:center; color:var(--ink-dim); font-size:.85rem; }
+  .wager-grid{ display:flex; flex-direction:column; gap:10px; max-width:320px; margin:0 auto 6px; }
+  .wager-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .wager-row label{ font-family:'Josefin Sans',sans-serif; font-weight:600; color:var(--ink); }
+  .wager-row .wager-input{ width:110px; font-size:1.2rem; padding:6px; margin:0; }
+  .wager-summary{
+    text-align:center; font-family:'Josefin Sans',sans-serif; font-size:.82rem; color:var(--ink-dim);
+    margin:-6px 0 10px;
+  }
 
   /* ---------- Setup overlay ---------- */
   .setup-card{ width:min(560px,100%); }
@@ -674,29 +682,47 @@
   function renderDailyDoubleWager(c,v,key,data,baseValue){
     sfxDailyDouble();
     clearTimer();
-    var team = state.teams[state.activeTeam];
-    var maxWager = Math.max(baseValue*2, Math.max(500, team.score));
+    var rows = state.teams.map(function(team, i){
+      var maxWager = Math.max(baseValue*2, Math.max(500, team.score));
+      var def = Math.min(baseValue, maxWager);
+      return '<div class="wager-row">' +
+        '<label for="wagerInput'+i+'">' + escapeHtml(team.name) + '</label>' +
+        '<input class="wager-input" id="wagerInput'+i+'" type="number" inputmode="numeric" min="5" max="'+maxWager+'" step="5" value="'+def+'" aria-label="'+escapeHtml(team.name)+' wager amount" data-max="'+maxWager+'">' +
+      '</div>';
+    }).join('');
     clueStage.innerHTML =
       '<div class="dd-banner">DAILY DOUBLE</div>' +
-      '<p class="hint">' + escapeHtml(team.name) + ', wager your points. Minimum $5, up to $' + maxWager + '.</p>' +
-      '<input class="wager-input" id="wagerInput" type="number" inputmode="numeric" min="5" max="'+maxWager+'" step="5" value="'+Math.min(baseValue, maxWager)+'" aria-label="Wager amount">' +
-      '<div class="stage-actions"><button class="primary" id="wagerGo">Lock In Wager</button></div>';
-    var input = clueStage.querySelector("#wagerInput");
+      '<p class="hint">Every team can wager on this one. Set each team&rsquo;s wager (minimum $5), then lock them in.</p>' +
+      '<div class="wager-grid">' + rows + '</div>' +
+      '<div class="stage-actions"><button class="primary" id="wagerGo">Lock In Wagers</button></div>';
     clueStage.querySelector("#wagerGo").addEventListener("click", function(){
-      var w = parseInt(input.value,10);
-      if(isNaN(w) || w < 5) w = 5;
-      if(w > maxWager) w = maxWager;
-      renderClueCard(c,v,key,data,baseValue,w,true);
+      var wagers = {};
+      state.teams.forEach(function(team, i){
+        var input = clueStage.querySelector("#wagerInput"+i);
+        var maxWager = parseInt(input.getAttribute("data-max"), 10);
+        var w = parseInt(input.value, 10);
+        if(isNaN(w) || w < 5) w = 5;
+        if(w > maxWager) w = maxWager;
+        wagers[i] = w;
+      });
+      renderClueCard(c,v,key,data,baseValue,wagers,true);
     });
   }
 
-  function renderClueCard(c,v,key,data,baseValue,pointValue,isDD){
+  function renderClueCard(c,v,key,data,baseValue,pointValueOrWagers,isDD){
     clearTimer();
     var timeLimit = 20;
     var startTime = Date.now();
+    var wagers = isDD ? pointValueOrWagers : null;
+    var pointValue = isDD ? null : pointValueOrWagers;
+
+    var kickerHtml = isDD
+      ? '<div class="stage-kicker"><span>' + escapeHtml(CATEGORIES[c].name) + ' &middot; DAILY DOUBLE</span></div>' +
+        '<div class="wager-summary">' + state.teams.map(function(t,i){ return escapeHtml(t.name)+': $'+wagers[i]; }).join(' &middot; ') + '</div>'
+      : '<div class="stage-kicker"><span>' + escapeHtml(CATEGORIES[c].name) + '</span><span>$' + pointValue + '</span></div>';
 
     clueStage.innerHTML =
-      '<div class="stage-kicker"><span>' + escapeHtml(CATEGORIES[c].name) + (isDD ? ' &middot; DAILY DOUBLE' : '') + '</span><span>$' + pointValue + '</span></div>' +
+      kickerHtml +
       '<div class="timer-bar"><div class="timer-fill" id="timerFill"></div></div>' +
       '<div class="clue-text">' + escapeHtml(data.clue) + '</div>' +
       '<div class="answer-text" id="answerText" hidden>' + escapeHtml(data.answer) + '</div>' +
@@ -705,7 +731,7 @@
         '<button class="ghost" id="btnSkip">Close (No Score)</button>' +
       '</div>' +
       '<div class="award-row" id="awardRow" hidden>' +
-        '<h3>' + (isDD ? 'Who answered correctly?' : 'Tap every team that got it right, then award points') + '</h3>' +
+        '<h3>' + (isDD ? 'Tap every team that answered correctly, then award wagers' : 'Tap every team that got it right, then award points') + '</h3>' +
         '<div class="award-grid" id="awardGrid"></div>' +
       '</div>';
 
@@ -734,34 +760,44 @@
       grid.innerHTML = "";
 
       if(isDD){
-        // Daily Double: only the wagering team can be credited, so each
-        // team button scores immediately, same as before.
+        // Daily Double: every team wagered, so the teacher taps each team
+        // that answered correctly. Selected teams win their own wager,
+        // every other team loses theirs.
+        var ddSelected = {};
+        var ddAwardBtn;
+        function refreshDDAwardBtn(){
+          ddAwardBtn.textContent = "Award Wagers";
+        }
         state.teams.forEach(function(team, i){
           var b = document.createElement("button");
-          b.textContent = team.name;
+          b.textContent = team.name + " ($" + wagers[i] + ")";
+          b.className = "team-toggle";
+          b.setAttribute("aria-pressed", "false");
           b.addEventListener("click", function(){
-            markUsed(key);
-            adjustScore(i, pointValue);
-            state.activeTeam = i;
-            sfxCorrect();
-            saveState();
-            renderBoard();
-            closeClue();
+            ddSelected[i] = !ddSelected[i];
+            b.classList.toggle("selected", !!ddSelected[i]);
+            b.setAttribute("aria-pressed", ddSelected[i] ? "true" : "false");
           });
           grid.appendChild(b);
         });
-        var wrongBtn = document.createElement("button");
-        wrongBtn.className = "ghost";
-        wrongBtn.textContent = "Wrong (lose wager)";
-        wrongBtn.addEventListener("click", function(){
+        ddAwardBtn = document.createElement("button");
+        ddAwardBtn.className = "primary";
+        grid.appendChild(ddAwardBtn);
+        refreshDDAwardBtn();
+        ddAwardBtn.addEventListener("click", function(){
           markUsed(key);
-          adjustScore(state.activeTeam, -pointValue);
-          sfxWrong();
+          var firstSelected = null;
+          state.teams.forEach(function(team, i){
+            var won = !!ddSelected[i];
+            adjustScore(i, won ? wagers[i] : -wagers[i]);
+            if(won && firstSelected === null) firstSelected = i;
+          });
+          if(firstSelected !== null) state.activeTeam = firstSelected;
+          sfxCorrect();
           saveState();
           renderBoard();
           closeClue();
         });
-        grid.appendChild(wrongBtn);
         return;
       }
 
