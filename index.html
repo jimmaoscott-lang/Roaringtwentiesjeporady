@@ -599,11 +599,13 @@
       var btnRow = document.createElement("div");
       btnRow.className = "score-btns";
       var minus = document.createElement("button");
-      minus.textContent = "−100";
-      minus.addEventListener("click", function(){ adjustScore(i,-100); });
+      minus.textContent = "−$" + activeClueValue;
+      minus.title = "Manually adjust by the value of the clue on screen ($" + activeClueValue + ")";
+      minus.addEventListener("click", function(){ adjustScore(i,-activeClueValue); });
       var plus = document.createElement("button");
-      plus.textContent = "+100";
-      plus.addEventListener("click", function(){ adjustScore(i,100); });
+      plus.textContent = "+$" + activeClueValue;
+      plus.title = "Manually adjust by the value of the clue on screen ($" + activeClueValue + ")";
+      plus.addEventListener("click", function(){ adjustScore(i,activeClueValue); });
       var turn = document.createElement("button");
       turn.textContent = "Turn";
       turn.className = "ghost";
@@ -658,6 +660,12 @@
   var clueOverlay = document.getElementById("clueOverlay");
   var clueStage = document.getElementById("clueStage");
   var timerInterval = null;
+  // Drives the manual +/- buttons on each team card, so a manual correction
+  // matches whichever clue's dollar value is currently on screen instead of
+  // a flat, unrelated $100.
+  var activeClueValue = 100;
+  function setActiveClueValue(v){ activeClueValue = v; renderScoreboard(); }
+  function resetActiveClueValue(){ activeClueValue = 100; renderScoreboard(); }
 
   function clearTimer(){
     if(timerInterval){ clearInterval(timerInterval); timerInterval = null; }
@@ -668,12 +676,14 @@
     clearTimer();
     clueOverlay.hidden = true;
     clueStage.innerHTML = "";
+    resetActiveClueValue();
   }
 
   function openClue(c, v, key){
     var isDD = state.dailyDoubles.indexOf(key) !== -1;
     var data = CATEGORIES[c].clues[v];
     var value = VALUES[v];
+    setActiveClueValue(value);
 
     if(isDD){
       renderDailyDoubleWager(c,v,key,data,value);
